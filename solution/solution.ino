@@ -66,7 +66,11 @@ struct Display {
   unsigned long lastAnimationAt = 0;
   bool animationIndicator = true;
 
-  bool animatinSwitch(unsigned long currentTime) {
+  size_t rollAnimationTime = 100;
+  size_t rollNumber = 4;
+  unsigned long lastRollAnimationAt = 0;
+
+  void animationSwitch(unsigned long currentTime) {
     if (currentTime - lastAnimationAt >= animationTime) {
       lastAnimationAt = currentTime;
       animationIndicator = !animationIndicator;
@@ -119,11 +123,21 @@ struct Display {
     writeGlyph(glyph);
   }
 
+  void renderRoll(unsigned long currentTime) {
+    if (currentTime - lastRollAnimationAt >= rollAnimationTime) {
+      lastRollAnimationAt = currentTime;
+      rollNumber = random(Dice.type * Dice.throws);
+      while (rollNumber == 0)
+        rollNumber = random(Dice.type * Dice.throws);
+    }
+    renderResult(rollNumber);
+  }
+
   void renderConf(size_t throws, size_t type, unsigned long currentTime,
                   bool animate) {
     byte glyph = EMPTY_GLYPH;
 
-    animatinSwitch(currentTime);
+    animationSwitch(currentTime);
 
     if (position == 3)
       glyph = digits[throws];
@@ -145,68 +159,6 @@ struct Display {
   }
 
 } Display;
-
-struct Led {
-  int pin;
-  bool ledON = false;
-
-  Led(int pin) { this->pin = pin; }
-
-  void setup() {
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, OFF);
-  }
-
-  void switchState() {
-    if (ledON == false)
-      turnOn();
-    else
-      turnOff();
-  }
-
-  void turnOn() {
-    digitalWrite(pin, ON);
-    ledON = true;
-  }
-
-  void turnOff() {
-    digitalWrite(pin, OFF);
-    ledON = false;
-  }
-};
-
-struct LedSystem {
-  Led ledArray[4]{Led(led4_pin), Led(led3_pin), Led(led2_pin), Led(led1_pin)};
-  size_t ledCount = 4;
-  bool ledsOFF = true;
-  size_t animationTime = 300;
-  unsigned long lastAnimationAt = 0;
-
-  void setup() {
-    for (size_t i = 0; i < ledCount; i++) {
-      ledArray[i].setup();
-    }
-  }
-
-  void animate(unsigned long currentTime) {
-    ledsOFF = false;
-    if (currentTime - lastAnimationAt >= animationTime) {
-      lastAnimationAt = currentTime;
-      for (size_t i = 0; i < ledCount; ++i) {
-        ledArray[i].switchState();
-      }
-    }
-  }
-
-  void turnOff() {
-    if (!ledsOFF) {
-      for (size_t i = 0; i < ledCount; ++i) {
-        ledArray[i].turnOff();
-      }
-      ledsOFF = true;
-    }
-  }
-} Leds;
 
 struct Button {
 
@@ -261,7 +213,6 @@ struct ButtonSystem {
 void setup() {
   Buttons.setup();
   Display.setup();
-  Leds.setup();
 }
 
 void loop() {
@@ -292,15 +243,12 @@ void loop() {
       Dice.changeDiceType();
   }
 
-  if (Buttons.buttonArray[0].isDown() && Dice.isInNormalMode())
-    Leds.animate(currentTime);
-  else
-    Leds.turnOff();
-
   if (Dice.isInResultMode())
     Display.renderResult(Dice.result);
-  else if (Dice.isInConfMode())
+  else if (Dice.isInConfMode() && !Buttons.buttonArray[0].isDown())
     Display.renderConf(Dice.throws, Dice.type, currentTime, true);
+  else if (Buttons.buttonArray[0].isDown() && Dice.isInNormalMode())
+    Display.renderRoll(currentTime);
   else
     Display.renderConf(Dice.throws, Dice.type, currentTime, false);
 }
